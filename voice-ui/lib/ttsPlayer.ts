@@ -5,6 +5,7 @@ export class TTSPlayer {
     private isPlaying = false;
     private currentSource: AudioBufferSourceNode | null = null;
     private currentRequestId: number | null = null;
+    private backendDone = false; // True when backend has sent all TTS sentences
 
     constructor() { }
 
@@ -61,6 +62,19 @@ export class TTSPlayer {
 
     public onComplete?: () => void;
 
+    /**
+     * Called when backend sends tts_complete (all sentences transmitted).
+     * If audio is already done playing, fires onComplete immediately.
+     */
+    markBackendDone() {
+        this.backendDone = true;
+        if (!this.isPlaying && this.sentenceQueue.length === 0) {
+            this.currentRequestId = null;
+            this.backendDone = false;
+            if (this.onComplete) this.onComplete();
+        }
+    }
+
     private playNext() {
         if (this.isPlaying || this.sentenceQueue.length === 0 || !this.audioContext) {
             return;
@@ -79,10 +93,13 @@ export class TTSPlayer {
 
             if (this.sentenceQueue.length > 0) {
                 this.playNext();
-            } else {
+            } else if (this.backendDone) {
+                // All sentences received from backend AND all played
                 this.currentRequestId = null;
+                this.backendDone = false;
                 if (this.onComplete) this.onComplete();
             }
+            // else: more audio may still arrive from backend, wait
         };
 
         this.currentSource = source;
@@ -97,5 +114,6 @@ export class TTSPlayer {
         this.sentenceQueue = [];
         this.isPlaying = false;
         this.currentRequestId = null;
+        this.backendDone = false;
     }
 }

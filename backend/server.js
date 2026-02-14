@@ -113,6 +113,13 @@ function shouldTriggerSearch(query) {
  * Uses session.finalTranscript accumulated during streaming.
  */
 async function handleUserTurn(session) {
+  // Processing lock: prevent concurrent turn processing
+  if (session.isProcessingTurn) {
+    console.log(`[TURN] Skipping handleUserTurn — already processing (${session.sessionId})`);
+    return;
+  }
+  session.isProcessingTurn = true;
+
   const transcript = session.finalTranscript.trim();
 
   // Reset transcript buffers for next turn immediately to avoid leakage
@@ -120,12 +127,21 @@ async function handleUserTurn(session) {
   session.interimTranscript = "";
 
   if (!transcript) {
-    console.log(`[USER SAID] (${session.sessionId}): <empty> (Skipping turn)`);
-    // Authority: Return to idle if nothing was said
-    if (session.ws && session.ws.readyState === 1) {
-      session.ws.send(JSON.stringify({ type: "state", value: "idle" }));
+    if (session.interimTranscript.trim().length > 2) {
+      transcript = session.interimTranscript.trim();
+      console.log(`[TURN] Using interim fallback (${session.sessionId}): ${transcript}`);
+    } else {
+      console.log(`[USER SAID] (${session.sessionId}): <empty> (Skipping turn)`);
+      session.isProcessingTurn = false;
+
+      // Authority: Return to idle/listening depending on mode
+      if (session.ws && session.ws.readyState === 1) {
+        // If interview active, stay LISTENING (don't get stuck on thinking)
+        const nextState = session.isInterviewActive ? "listening" : "idle";
+        session.ws.send(JSON.stringify({ type: "state", value: nextState }));
+      }
+      return;
     }
-    return;
   }
 
   console.log(`[STT FINAL COMMIT] (${session.sessionId}): ${transcript}`);
@@ -169,6 +185,11 @@ async function handleUserTurn(session) {
       }
       await streamTTS(speechOutput, session, session.ws);
 
+      // After AI finishes speaking in interview mode, go to listening for next user response
+      if (session.ws && session.ws.readyState === 1) {
+        session.ws.send(JSON.stringify({ type: "state", value: "listening" }));
+      }
+
       // Emit metrics
       if (session.ws && session.ws.readyState === 1) {
         const sttLatency = session.sttFinishTime - session.turnStartTime;
@@ -185,6 +206,7 @@ async function handleUserTurn(session) {
         session.hasBargeIn = false;
       }
 
+      session.isProcessingTurn = false;
       return; // Done — skip the generic voice assistant path
     }
 
@@ -295,6 +317,8 @@ Strict Rules:
 
   } catch (err) {
     console.error("[TURN] Failed to process user turn:", err.message);
+  } finally {
+    session.isProcessingTurn = false;
   }
 }
 
@@ -355,9 +379,11 @@ wss.on("connection", (ws) => {
       if (message.type === "playback_complete") {
         console.log(`[TTS] Client finished playback (${session.sessionId})`);
         session.isSpeakingTTS = false;
-        // Authority: Now that audio is done, we can go idle
+        // During interview: go to listening (waiting for next user response)
+        // Outside interview: go to idle
         if (ws.readyState === 1) {
-          ws.send(JSON.stringify({ type: "state", value: "idle" }));
+          const nextState = session.isInterviewActive ? "listening" : "idle";
+          ws.send(JSON.stringify({ type: "state", value: nextState }));
         }
       }
 
@@ -431,45 +457,77 @@ wss.on("connection", (ws) => {
 
     // 2. Handle Binary Audio Data
     session.lastAudioTimestamp = Date.now();
-    const vadStatus = session.vad.process(data);
+
+    // Convert to Float32Array for Noise Suppressor & VAD
+    let floatSamples;
+    if (Buffer.isBuffer(data)) {
+      floatSamples = new Float32Array(data.length / 2);
+      for (let i = 0; i < floatSamples.length; i++) {
+        floatSamples[i] = data.readInt16LE(i * 2) / 32768.0;
+      }
+    } else {
+      floatSamples = data;
+    }
+
+    // Apply Noise Suppression (updates noise floor state)
+    const cleanSamples = session.noise.suppress(floatSamples);
+
+    // Pass CLEAN samples to VAD
+    const vadStatus = session.vad.process(cleanSamples);
 
     // Stream ALL audio to Deepgram if socket is open (Always-On)
     if (session.sttSocket && session.sttSocket.readyState === WebSocket.OPEN) {
       session.sttSocket.send(data);
     }
 
-    if (vadStatus === "speech_start" && !session.isSpeaking) {
-      session.isSpeaking = true;
-      console.log(`[TURN] Speech started (${session.sessionId})`);
-
-      if (ws.readyState === 1) {
-        ws.send(JSON.stringify({ type: "state", value: "listening" }));
+    if (vadStatus === "speech_start") {
+      // Cancel pending silence debounce
+      if (session.debounceTimer) {
+        clearTimeout(session.debounceTimer);
+        session.debounceTimer = null;
+        console.log(`[VAD] Debounce: silence interruption cancelled (${session.sessionId})`);
       }
 
-      session.ttsRequestId += 1;
-      session.isSpeakingTTS = false;
+      if (!session.isSpeaking) {
+        session.isSpeaking = true;
+        console.log(`[TURN] Speech started (${session.sessionId})`);
 
-      if (session.ttsSocket) {
-        try {
-          session.ttsSocket.close();
-        } catch (e) { }
-        session.ttsSocket = null;
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: "state", value: "listening" }));
+        }
+
+        session.ttsRequestId += 1;
+        session.isSpeakingTTS = false;
+
+        if (session.ttsSocket) {
+          try {
+            session.ttsSocket.close();
+          } catch (e) { }
+          session.ttsSocket = null;
+        }
+
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: "barge_in" }));
+        }
+
+        session.hasBargeIn = true;
+        console.log(`[TTS] Hard cancel triggered (requestId=${session.ttsRequestId})`);
+
+        // Reset buffers for clean turn start
+        session.finalTranscript = "";
+        session.interimTranscript = "";
       }
-
-      if (ws.readyState === 1) {
-        ws.send(JSON.stringify({ type: "barge_in" }));
-      }
-
-      session.hasBargeIn = true;
-      console.log(`[TTS] Hard cancel triggered (requestId=${session.ttsRequestId})`);
-
-      // Reset buffers for clean turn start
-      session.finalTranscript = "";
-      session.interimTranscript = "";
     }
 
     if (vadStatus === "speech_end" && session.isSpeaking) {
-      finalizeTurn(session);
+      // Debounce: Wait 1 second of silence before finalizing
+      if (session.debounceTimer) clearTimeout(session.debounceTimer);
+
+      console.log(`[VAD] Speech end detected. Waiting 2500ms... (${session.sessionId})`);
+      session.debounceTimer = setTimeout(() => {
+        session.debounceTimer = null;
+        finalizeTurn(session);
+      }, 2500);
     }
   });
 
@@ -487,9 +545,12 @@ wss.on("connection", (ws) => {
 });
 
 async function finalizeTurn(session) {
-  // If simulated by debug_input, force isSpeaking to treat as turn end
-  // But normally isSpeaking is imperative.
-  // For debug logic, we just call handleUserTurn directly.
+  // Guard: skip if already processing a turn (prevents concurrent invocations
+  // from VAD speech_end + heartbeat interval firing simultaneously)
+  if (session.isProcessingTurn) {
+    console.log(`[TURN] Skipping finalizeTurn — already processing (${session.sessionId})`);
+    return;
+  }
 
   // Normal VAD buffer flush logic for real audio
   if (session.isSpeaking) {
@@ -517,6 +578,9 @@ server.listen(PORT, () => {
 setInterval(() => {
   const now = Date.now();
   for (const session of sessionManager.getAllSessions()) {
+    // Skip if already processing a turn (prevents heartbeat from
+    // firing finalizeTurn during active LLM/TTS processing)
+    if (session.isProcessingTurn) continue;
     if (
       session.isSpeaking &&
       now - session.lastAudioTimestamp > TURN_END_SILENCE_MS

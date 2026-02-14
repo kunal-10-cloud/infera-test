@@ -38,6 +38,8 @@ class Session {
 
     // Interview State
     this.isInterviewActive = false;  // Flag for testimonial interview mode
+    this.isProcessingTurn = false;   // Lock to prevent concurrent turn processing
+    this.debounceTimer = null;       // VAD silence debounce timer
   }
 }
 

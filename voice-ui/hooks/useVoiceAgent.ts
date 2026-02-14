@@ -76,6 +76,10 @@ export function useVoiceAgent(options: UseVoiceAgentOptions = {}) {
                 }
                 break;
 
+            case "tts_complete":
+                ttsPlayerRef.current?.markBackendDone();
+                break;
+
             case "session_started":
                 console.log("[SESSION] Started:", msg.sessionId);
                 setSessionId(msg.sessionId || null);
