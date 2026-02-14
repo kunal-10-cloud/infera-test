@@ -106,24 +106,24 @@ export default function InterviewPage() {
 
         (async () => {
             // 3a. Inject the testimonial interview context
-            const contextPrompt = `IMPORTANT: You are a TESTIMONIAL INTERVIEWER, not a general assistant.
-You are conducting a video testimonial interview for a business described as: "${prompt}"
+            const contextPrompt = `IMPORTANT: You are a TESTIMONIAL INTERVIEWER. Your goal is to get a short, crisp video testimonial (max 3 exchanges).
+You are interviewing a customer about: "${prompt}"
 
-YOUR ROLE:
-- You are interviewing a customer/client of this business
-- Ask warm, conversational questions about their experience
-- Listen carefully and adapt your next question based on their answers
-- Cover these areas naturally: their overall experience, what they loved, what could be improved, and who they'd recommend this to
+YOUR FLOW (Strictly follow this order):
+1. **First Question**: Ask about their overall experience. What did they like? What did they dislike?
+2. **Analyze Answer**:
+   - IF POSITIVE: Ask if they have anything else to add.
+   - IF NEGATIVE/MIXED: Be apologetic and ask for their top recommendation to improve.
+   - IF they already covered everything: Move significantly to closing.
+3. **Closing**: Thank them warmly for their feedback.
+   - **CRITICAL**: Append the tag <END_INTERVIEW> to the end of your final thank-you message.
 
 RULES:
-- Ask ONE question at a time, then wait for the answer
-- Keep responses SHORT (1-2 sentences max before asking the next question)
-- Be warm and encouraging — react to what they say before asking the next question
-- Do NOT use bullet points, lists, or markdown. Speak naturally
-- Do NOT search the web for any information
-- After asking 3-4 good questions and getting solid answers, ask: "Is there anything else you'd like to share about your experience?"
-- If they say no or have nothing to add, wrap up warmly by saying: "Thank you so much for sharing your experience. Your feedback means a lot!"
-- Start by warmly greeting them and asking your first question about their experience`;
+- ONE question at a time.
+- Keep responses SHORT (1 sentence max).
+- NO lists or bullet points.
+- If the user says "no" to adding more, seeking recommendations, or is done: Say thank you and append <END_INTERVIEW>.
+- DO NOT say <END_INTERVIEW> unless you are absolutely finished.`;
 
             sendContextUpdate(contextPrompt);
             console.log("[INTERVIEW] Context injected");
@@ -131,7 +131,9 @@ RULES:
             // 3b. Small delay to ensure context is processed
             await new Promise(r => setTimeout(r, 600));
 
-            // 3c. Start webcam recording (per refinement #4: only after WS is confirmed open)
+            // 3c. Start FULL SESSION recording (Screen + Audio)
+            // Note: browser will prompt user to select screen
+            alert("Please select THIS TAB and enable 'Share Audio' to record the interview.");
             await startRecording();
             console.log("[INTERVIEW] Recording started");
 
@@ -168,10 +170,10 @@ RULES:
             <div className="flex-shrink-0 h-14 border-b border-white/10 flex items-center justify-between px-6 bg-black/40 backdrop-blur-xl">
                 <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full animate-pulse ${isEnding ? 'bg-red-400' :
-                            agentState === 'listening' ? 'bg-blue-500' :
-                                agentState === 'thinking' ? 'bg-purple-500' :
-                                    agentState === 'speaking' ? 'bg-emerald-500' :
-                                        'bg-slate-400'
+                        agentState === 'listening' ? 'bg-blue-500' :
+                            agentState === 'thinking' ? 'bg-purple-500' :
+                                agentState === 'speaking' ? 'bg-emerald-500' :
+                                    'bg-slate-400'
                         }`} />
                     <span className="text-xs uppercase tracking-[0.15em] text-slate-400 font-semibold">
                         {isEnding ? 'Wrapping up...' :
@@ -210,9 +212,9 @@ RULES:
                     {/* Ambient glow */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className={`w-64 h-64 rounded-full blur-[100px] transition-colors duration-1000 ${agentState === 'listening' ? 'bg-blue-600/20' :
-                                agentState === 'thinking' ? 'bg-purple-600/20' :
-                                    agentState === 'speaking' ? 'bg-emerald-600/20' :
-                                        'bg-slate-600/10'
+                            agentState === 'thinking' ? 'bg-purple-600/20' :
+                                agentState === 'speaking' ? 'bg-emerald-600/20' :
+                                    'bg-slate-600/10'
                             }`} />
                     </div>
 
@@ -233,9 +235,9 @@ RULES:
                         className="relative z-10"
                     >
                         <div className={`w-32 h-32 md:w-40 md:h-40 rounded-full transition-all duration-500 ${agentState === 'listening' ? 'bg-gradient-to-br from-blue-500 to-blue-700 shadow-[0_0_60px_rgba(59,130,246,0.4)]' :
-                                agentState === 'thinking' ? 'bg-gradient-to-br from-purple-500 to-purple-700 shadow-[0_0_60px_rgba(168,85,247,0.4)]' :
-                                    agentState === 'speaking' ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_60px_rgba(52,211,153,0.4)]' :
-                                        'bg-gradient-to-br from-slate-600 to-slate-800 shadow-[0_0_30px_rgba(100,116,139,0.2)]'
+                            agentState === 'thinking' ? 'bg-gradient-to-br from-purple-500 to-purple-700 shadow-[0_0_60px_rgba(168,85,247,0.4)]' :
+                                agentState === 'speaking' ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_60px_rgba(52,211,153,0.4)]' :
+                                    'bg-gradient-to-br from-slate-600 to-slate-800 shadow-[0_0_30px_rgba(100,116,139,0.2)]'
                             }`} />
                     </motion.div>
 

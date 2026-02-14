@@ -47,13 +47,28 @@ export default function PlaybackPage() {
                     </div>
                 )}
 
+                {videoUrl && (
+                    <a
+                        href={videoUrl}
+                        download={`testimonial-${Date.now()}.webm`}
+                        className="block w-full mb-3 px-8 py-3 rounded-xl font-semibold text-sm transition-all duration-300 cursor-pointer
+                        bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 hover:border-emerald-500/50
+                        text-emerald-400 hover:text-emerald-300 flex items-center justify-center gap-2"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Download Video
+                    </a>
+                )}
+
                 <button
                     onClick={() => {
                         sessionStorage.removeItem('testimonial_prompt');
                         sessionStorage.removeItem('testimonial_video_url');
                         router.push('/');
                     }}
-                    className="px-8 py-3 rounded-xl font-semibold text-sm transition-all duration-300 cursor-pointer
+                    className="w-full px-8 py-3 rounded-xl font-semibold text-sm transition-all duration-300 cursor-pointer
             bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500
             shadow-lg shadow-violet-600/20 hover:shadow-violet-500/30"
                 >

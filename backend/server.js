@@ -154,7 +154,14 @@ async function handleUserTurn(session) {
       ];
 
       session.llmTtftTime = Date.now();
-      const finalResponse = await generateResponse({ messages: finalMessages });
+      let finalResponse = await generateResponse({ messages: finalMessages });
+
+      // Save, format, TTS, metrics handled below
+      let isInterviewComplete = false;
+      if (finalResponse.includes("<END_INTERVIEW>")) {
+        isInterviewComplete = true;
+        finalResponse = finalResponse.replace("<END_INTERVIEW>", "").trim();
+      }
 
       // Save, format, TTS, metrics handled below
       session.llmFinishTime = Date.now();
@@ -167,7 +174,16 @@ async function handleUserTurn(session) {
         session.ws.send(JSON.stringify({ type: "state", value: "speaking" }));
         session.ws.send(JSON.stringify({ type: "transcript_assistant", text: finalResponse }));
       }
+
+      // Wait for TTS to finish streaming
       await streamTTS(speechOutput, session, session.ws);
+
+      // If interview is complete, send the signal to frontend
+      if (isInterviewComplete && session.ws && session.ws.readyState === 1) {
+        console.log(`[INTERVIEW] Auto-terminating session ${session.sessionId}`);
+        session.ws.send(JSON.stringify({ type: "interview_end" }));
+        session.isInterviewActive = false;
+      }
 
       // Emit metrics
       if (session.ws && session.ws.readyState === 1) {

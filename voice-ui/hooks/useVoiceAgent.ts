@@ -49,12 +49,22 @@ export function useVoiceAgent(options: UseVoiceAgentOptions = {}) {
 
             case "transcript_assistant":
                 if (msg.text) {
+                    let text = msg.text;
+                    if (text.includes("<END_INTERVIEW>")) {
+                        text = text.replace("<END_INTERVIEW>", "").trim();
+                        // Trigger end callback
+                        if (onInterviewEndRef.current) {
+                            console.log("[INTERVIEW] Frontend detected <END_INTERVIEW> tag → ending...");
+                            onInterviewEndRef.current();
+                        }
+                    }
+
                     setTranscript(prev => {
                         const last = prev[prev.length - 1];
                         if (last && last.role === "assistant") {
-                            return [...prev.slice(0, -1), { role: "assistant", text: msg.text! }];
+                            return [...prev.slice(0, -1), { role: "assistant", text: text }];
                         }
-                        return [...prev, { role: "assistant", text: msg.text! }];
+                        return [...prev, { role: "assistant", text: text }];
                     });
                 }
                 break;
