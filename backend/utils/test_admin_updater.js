@@ -12,7 +12,7 @@
 const https = require("https");
 const readline = require("readline");
 
-const API_HOST = "ai-voice-qtky.onrender.com";
+const API_HOST = "infera-test.onrender.com";
 const API_PROTOCOL = "https:";
 
 const rl = readline.createInterface({

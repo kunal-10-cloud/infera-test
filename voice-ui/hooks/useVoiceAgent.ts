@@ -91,7 +91,7 @@ export function useVoiceAgent(options: UseVoiceAgentOptions = {}) {
     const connect = useCallback(async () => {
         if (wsRef.current) return;
 
-        const BACKEND_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
+        const BACKEND_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://infera-test.onrender.com";
         console.log(`[WS] Connecting to: ${BACKEND_URL}`);
 
         const ws = new VoiceWebSocket(BACKEND_URL, handleMessage);

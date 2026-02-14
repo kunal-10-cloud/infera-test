@@ -9,7 +9,7 @@ const { webSearch } = require("./tools/webSearch");
 const { streamTTS } = require("./tts/ttsService");
 const { formatForSpeech } = require("./utils/speechFormatter");
 
-const PORT = 8080;
+const PORT = process.env.PORT || 8080;
 const TURN_END_SILENCE_MS = 800;
 const TURN_CHECK_INTERVAL_MS = 200;
 
@@ -528,7 +528,7 @@ setInterval(() => {
 }, TURN_CHECK_INTERVAL_MS);
 const https = require("https");
 // Self-ping to keep Render instance alive (every 5 minutes)
-const RENDER_EXTERNAL_URL = "https://ai-voice-qtky.onrender.com/health";
+const RENDER_EXTERNAL_URL = "https://infera-test.onrender.com/health";
 setInterval(() => {
   https.get(RENDER_EXTERNAL_URL, (res) => {
     console.log(`[SELF-PING] Status: ${res.statusCode}`);
