@@ -523,11 +523,11 @@ wss.on("connection", (ws) => {
       // Debounce: Wait 1 second of silence before finalizing
       if (session.debounceTimer) clearTimeout(session.debounceTimer);
 
-      console.log(`[VAD] Speech end detected. Waiting 2500ms... (${session.sessionId})`);
+      console.log(`[VAD] Speech end detected. Waiting 900ms... (${session.sessionId})`);
       session.debounceTimer = setTimeout(() => {
         session.debounceTimer = null;
         finalizeTurn(session);
-      }, 2500);
+      }, 900);
     }
   });
 
