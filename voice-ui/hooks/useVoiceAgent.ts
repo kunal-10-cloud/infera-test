@@ -76,10 +76,6 @@ export function useVoiceAgent(options: UseVoiceAgentOptions = {}) {
                 }
                 break;
 
-            case "tts_complete":
-                ttsPlayerRef.current?.markBackendDone();
-                break;
-
             case "session_started":
                 console.log("[SESSION] Started:", msg.sessionId);
                 setSessionId(msg.sessionId || null);
@@ -95,7 +91,7 @@ export function useVoiceAgent(options: UseVoiceAgentOptions = {}) {
     const connect = useCallback(async () => {
         if (wsRef.current) return;
 
-        const BACKEND_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://infera-test.onrender.com";
+        const BACKEND_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
         console.log(`[WS] Connecting to: ${BACKEND_URL}`);
 
         const ws = new VoiceWebSocket(BACKEND_URL, handleMessage);
