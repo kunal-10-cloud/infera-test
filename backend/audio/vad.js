@@ -1,6 +1,6 @@
 class VAD {
   constructor() {
-    this.speechThreshold = 0.015; // Lower threshold permissible due to NoiseSuppressor
+    this.speechThreshold = 0.03; // Lower threshold permissible due to NoiseSuppressor
     this.silenceFrames = 0;
     this.speaking = false;
     this.SILENCE_LIMIT = 8; // ~1.6s if frames are 200ms
