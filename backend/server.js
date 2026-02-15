@@ -1,85 +1,148 @@
 require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const multer = require("multer");
+const fs = require("fs");
+const path = require("path");
+
 const http = require("http");
 const WebSocket = require("ws");
-
+const { execSync } = require('child_process');
 const SessionManager = require("./sessions/SessionManager");
 const { createStreamingSTT } = require("./stt/sttService");
 const { generateResponse } = require("./llm/llmService");
 const { webSearch } = require("./tools/webSearch");
 const { streamTTS } = require("./tts/ttsService");
 const { formatForSpeech } = require("./utils/speechFormatter");
+const { analyzeHighlights, createReel } = require("./video/reelService");
+const vizardService = require("./video/vizardService");
 
 const PORT = 8080;
+console.log("!!! INFERA BACKEND LOADED - VERSION 9.0 - ASYNC ENGINE !!!");
 const TURN_END_SILENCE_MS = 800;
 const TURN_CHECK_INTERVAL_MS = 200;
 
-// 1. Create HTTP Server for Admin API
-const server = http.createServer((req, res) => {
-  // Add CORS headers for all requests
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+// FOR DEVELOPMENT: Automatically clear port 8080 if it's stuck
+try {
+  const currentPid = process.pid.toString();
+  const pids = execSync(`lsof -t -i:${PORT}`).toString().trim().split('\n');
+  pids.forEach(pid => {
+    if (pid && pid !== currentPid) {
+      console.log(`[SERVER] Cleaning up stale process ${pid} on port ${PORT}...`);
+      try { execSync(`kill -9 ${pid}`); } catch (e) { }
+    }
+  });
+} catch (e) {
+  // ignore
+}
 
-  // Handle preflight OPTIONS request
-  if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
-    return;
+// Setup Express
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Ensure directories exist
+const uploadDir = path.join(__dirname, "uploads");
+const reelDir = path.join(__dirname, "public", "reels");
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+if (!fs.existsSync(reelDir)) fs.mkdirSync(reelDir, { recursive: true });
+
+// Serve static files (reels)
+app.use("/reels", express.static(reelDir));
+
+// Setup Multer for video uploads
+const upload = multer({ dest: "uploads/" });
+
+// ── Express Routes ──
+
+// Health Check
+app.get("/health", (req, res) => res.send("OK"));
+
+// Admin API: Context Update
+app.post("/admin/context", (req, res) => {
+  const { sessionId, content } = req.body;
+  if (!sessionId || !content) {
+    return res.status(400).json({ error: "Missing sessionId or content" });
   }
 
-  // Admin API: POST /admin/context
-  if (req.method === "POST" && req.url === "/admin/context") {
-    let body = "";
-    req.on("data", chunk => { body += chunk.toString(); });
-    req.on("end", () => {
-      try {
-        const { sessionId, content } = JSON.parse(body);
-
-        if (!sessionId || !content) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Missing sessionId or content" }));
-          return;
-        }
-
-        const session = sessionManager.getSession(sessionId);
-        if (!session) {
-          res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Session not found" }));
-          return;
-        }
-
-        // Apply Context Update Atomicially
-        session.dynamicContext = [{ role: "system", content: content.trim() }];
-        session.contextVersion++;
-        console.log(`[CONTEXT] Session ${session.sessionId}: updated (v${session.contextVersion}) via ADMIN API`);
-
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: true, version: session.contextVersion }));
-
-      } catch (e) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Invalid JSON" }));
-      }
-    });
-    return;
+  const session = sessionManager.getSession(sessionId);
+  if (!session) {
+    return res.status(404).json({ error: "Session not found" });
   }
 
-  // Health Check
-  if (req.url === "/health") {
-    res.writeHead(200);
-    res.end("OK");
-    return;
-  }
-
-  res.writeHead(404);
-  res.end("Not Found");
+  session.dynamicContext = [{ role: "system", content: content.trim() }];
+  session.contextVersion++;
+  console.log(`[CONTEXT] Session ${session.sessionId}: updated (v${session.contextVersion}) via ADMIN API`);
+  res.json({ success: true, version: session.contextVersion });
 });
 
-// 2. Attach WebSocket Server to HTTP Server
-const wss = new WebSocket.Server({ server });
-const sessionManager = new SessionManager();
+/**
+ * Viral Reel Generation API
+ */
+app.post("/api/generate-reel", upload.single("video"), async (req, res) => {
+  try {
+    const { transcript } = req.body;
+    const videoFile = req.file;
 
-console.log(`Voice Agent Server (HTTP + WS) running on :${PORT}`);
+    if (!videoFile || !transcript) {
+      return res.status(400).json({ error: "Missing video file or transcript" });
+    }
+
+    console.log(`[REEL] AI Automation requested. File: ${videoFile.path}`);
+
+    if (!process.env.VIZARD_API_KEY) {
+      console.log("[REEL] VIZARD_API_KEY missing. Falling back to manual cinematic FFmpeg for now.");
+      // 1. Analyze highlights
+      const highlights = await analyzeHighlights(transcript);
+
+      // 2. Process Video
+      const outputFilename = `reel-${Date.now()}.mp4`;
+      const outputPath = path.join(reelDir, outputFilename);
+      const inputPath = path.join(__dirname, videoFile.path);
+
+      await createReel(inputPath, outputPath, highlights);
+
+      // 3. Cleanup input
+      fs.unlinkSync(inputPath);
+
+      // 4. Return URL
+      const reelUrl = `${req.protocol}://${req.get("host")}/reels/${outputFilename}`;
+      return res.json({ success: true, reelUrl, hookText: highlights.hookText, mode: 'fallback_ffmpeg' });
+    }
+
+    // ── Vizard.ai Logic ──
+    const inputPath = path.join(__dirname, videoFile.path);
+
+    // We start the background process, but since the user wants to see it, 
+    // we'll simulate the "High Quality" result. 
+    // In a real prod environment, we'd use webhooks.
+
+    const project = await vizardService.uploadToVizard(inputPath);
+    const bestClip = await vizardService.pollForResults(project.projectId);
+
+    // Cleanup input
+    fs.unlinkSync(inputPath);
+
+    res.json({
+      success: true,
+      reelUrl: bestClip.videoUrl,
+      hookText: bestClip.title,
+      mode: 'ai_automation'
+    });
+
+  } catch (error) {
+    console.error(`[REEL] Error:`, error);
+    res.status(500).json({ error: "Failed to generate reel", details: error.message });
+  }
+});
+
+// 2. Create HTTP Server for shared use
+// Setup WebSocket Server & Session Manager
+const sessionManager = new SessionManager();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+console.log(`Voice Agent Server (Express + WS) running on :${PORT}`);
 
 /**
  * Intent Gating Logic: Only trigger search for specific, time-sensitive queries.

@@ -19,6 +19,23 @@ export default function InterviewPage() {
 
     const { videoRef, isRecording, startRecording, stopRecording } = useMediaRecorder();
 
+    // ── Voice Agent with interview_end callback ──
+    const {
+        state: agentState,
+        transcript,
+        isConnected,
+        connect,
+        disconnect,
+        sendContextUpdate,
+        sendStartInterview,
+        sendEndInterview,
+    } = useVoiceAgent({
+        onInterviewEnd: () => {
+            console.log("[INTERVIEW] Backend signaled interview_end → ending...");
+            endInterviewRef.current();
+        },
+    });
+
     // ── End Interview (called by timer expiry OR backend signal) ──
     const endInterview = useCallback(async () => {
         if (isEndingRef.current) return;
@@ -37,23 +54,6 @@ export default function InterviewPage() {
 
     const endInterviewRef = useRef(endInterview);
     endInterviewRef.current = endInterview;
-
-    // ── Voice Agent with interview_end callback ──
-    const {
-        state: agentState,
-        transcript,
-        isConnected,
-        connect,
-        disconnect,
-        sendContextUpdate,
-        sendStartInterview,
-        sendEndInterview,
-    } = useVoiceAgent({
-        onInterviewEnd: () => {
-            console.log("[INTERVIEW] Backend signaled interview_end → ending...");
-            endInterviewRef.current();
-        },
-    });
 
     // ── Timer Expiry Handler ──
     const handleTimerExpire = useCallback(() => {

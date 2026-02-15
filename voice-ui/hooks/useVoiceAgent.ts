@@ -38,11 +38,15 @@ export function useVoiceAgent(options: UseVoiceAgentOptions = {}) {
             case "transcript_user":
                 if (msg.text) {
                     setTranscript(prev => {
+                        let newTranscript;
                         const last = prev[prev.length - 1];
                         if (last && last.role === "user" && (last as any).isInterim) {
-                            return [...prev.slice(0, -1), { role: "user", text: msg.text!, isInterim: msg.isInterim } as any];
+                            newTranscript = [...prev.slice(0, -1), { role: "user", text: msg.text!, isInterim: msg.isInterim } as any];
+                        } else {
+                            newTranscript = [...prev, { role: "user", text: msg.text!, isInterim: msg.isInterim } as any];
                         }
-                        return [...prev, { role: "user", text: msg.text!, isInterim: msg.isInterim } as any];
+                        sessionStorage.setItem('last_interview_transcript', JSON.stringify(newTranscript));
+                        return newTranscript;
                     });
                 }
                 break;
@@ -60,11 +64,15 @@ export function useVoiceAgent(options: UseVoiceAgentOptions = {}) {
                     }
 
                     setTranscript(prev => {
+                        let newTranscript;
                         const last = prev[prev.length - 1];
                         if (last && last.role === "assistant") {
-                            return [...prev.slice(0, -1), { role: "assistant", text: text }];
+                            newTranscript = [...prev.slice(0, -1), { role: "assistant" as const, text: text }];
+                        } else {
+                            newTranscript = [...prev, { role: "assistant" as const, text: text }];
                         }
-                        return [...prev, { role: "assistant", text: text }];
+                        sessionStorage.setItem('last_interview_transcript', JSON.stringify(newTranscript));
+                        return newTranscript;
                     });
                 }
                 break;
