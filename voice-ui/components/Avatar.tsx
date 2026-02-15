@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence, Variants } from 'framer-motion';
+import Image from 'next/image';
 import { AgentState } from '@/lib/websocket';
 
 interface AvatarProps {
@@ -87,6 +88,21 @@ export default function Avatar({ state }: AvatarProps) {
                         } 
             transition-colors duration-700 shadow-2xl overflow-hidden`}
                 >
+                    {/* Character Image */}
+                    <Image 
+                        src="/avatar.png" 
+                        alt="AI Character"
+                        fill
+                        className="object-cover rounded-full"
+                    />
+                    
+                    {/* Overlay for state effects */}
+                    <div className={`absolute inset-0 rounded-full transition-all duration-700 ${state === "idle" ? "bg-slate-800/30" :
+                            state === "listening" ? "bg-blue-500/20" :
+                                state === "thinking" ? "bg-purple-500/20" :
+                                    "bg-emerald-500/20"
+                        }`} />
+
                     {/* Internal Shine Component */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.2),transparent_70%)]" />
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { useVoiceAgent } from '@/hooks/useVoiceAgent';
 import { useMediaRecorder } from '@/hooks/useMediaRecorder';
 import { useInterviewTimer } from '@/hooks/useInterviewTimer';
@@ -53,7 +54,11 @@ export default function InterviewPage() {
     }, [stopRecording, router]);
 
     const endInterviewRef = useRef(endInterview);
-    endInterviewRef.current = endInterview;
+    
+    // Update ref when endInterview changes
+    useEffect(() => {
+        endInterviewRef.current = endInterview;
+    }, [endInterview]);
 
     // ── Timer Expiry Handler ──
     const handleTimerExpire = useCallback(() => {
@@ -218,7 +223,7 @@ RULES:
                             }`} />
                     </div>
 
-                    {/* Animated Orb */}
+                    {/* Animated Orb with Character */}
                     <motion.div
                         animate={{
                             scale: agentState === 'speaking' ? [1, 1.15, 1] :
@@ -234,11 +239,25 @@ RULES:
                         }}
                         className="relative z-10"
                     >
-                        <div className={`w-32 h-32 md:w-40 md:h-40 rounded-full transition-all duration-500 ${agentState === 'listening' ? 'bg-gradient-to-br from-blue-500 to-blue-700 shadow-[0_0_60px_rgba(59,130,246,0.4)]' :
+                        <div className={`w-32 h-32 md:w-40 md:h-40 rounded-full transition-all duration-500 overflow-hidden ${agentState === 'listening' ? 'bg-gradient-to-br from-blue-500 to-blue-700 shadow-[0_0_60px_rgba(59,130,246,0.4)]' :
                             agentState === 'thinking' ? 'bg-gradient-to-br from-purple-500 to-purple-700 shadow-[0_0_60px_rgba(168,85,247,0.4)]' :
                                 agentState === 'speaking' ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_60px_rgba(52,211,153,0.4)]' :
                                     'bg-gradient-to-br from-slate-600 to-slate-800 shadow-[0_0_30px_rgba(100,116,139,0.2)]'
-                            }`} />
+                            }`}>
+                            {/* Character Image */}
+                            <Image 
+                                src="/avatar.png" 
+                                alt="AI Character"
+                                fill
+                                className="object-cover rounded-full"
+                            />
+                            {/* Overlay gradient for state effects */}
+                            <div className={`absolute inset-0 rounded-full transition-all duration-500 ${agentState === 'listening' ? 'bg-blue-500/20' :
+                                agentState === 'thinking' ? 'bg-purple-500/20' :
+                                    agentState === 'speaking' ? 'bg-emerald-500/20' :
+                                        'bg-slate-800/30'
+                                }`} />
+                        </div>
                     </motion.div>
 
                     <p className="mt-6 text-xs text-slate-500 uppercase tracking-[0.2em] font-semibold">
